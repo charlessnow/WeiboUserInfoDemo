@@ -9,18 +9,18 @@
 #import "WeiboUserInfoVC.h"
 #import "WeiboUserInfoHeaderView.h"
 #import "WeiboUserInfoChildVC.h"
+#import "WeiboUserInfoTitleView.h"
 
-@interface WeiboUserInfoVC ()<UIScrollViewDelegate,WeiboUserInfoChildVCDelegate>
+@interface WeiboUserInfoVC ()<UIScrollViewDelegate,WeiboUserInfoChildVCDelegate,WeiboUserInfoTitleViewDelegate>
 
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) NSArray<WeiboUserInfoChildVC *> *childVCs;
 @property (nonatomic, strong) WeiboUserInfoChildVC *currentVC;
 @property (nonatomic, strong) WeiboUserInfoHeaderView *headerView;
 
-@property (nonatomic, strong) UIView *titleView;
-@property (nonatomic, strong) NSMutableArray<UILabel *> *titleLabels;
-@property (nonatomic, strong) UIView *titleLine;
+@property (nonatomic, strong) WeiboUserInfoTitleView *titleView;
 
+@property (nonatomic, assign) NSInteger currentPage;
 @property (nonatomic, assign) CGFloat headerOffsetY;
 
 @end
@@ -38,8 +38,8 @@ static CGFloat titleViewHeight = 40.f;
     if (self) {
         self.view.backgroundColor = [UIColor whiteColor];
         self.automaticallyAdjustsScrollViewInsets = NO;
-        self.titleLabels = [NSMutableArray array];
         self.childVCs = childVCs;
+        self.currentPage = 0;
     }
     return self;
 }
@@ -50,13 +50,28 @@ static CGFloat titleViewHeight = 40.f;
     [self.navigationController setNavigationBarHidden:YES];
 }
 
+#pragma mark WeiboUserInfoTitleViewDelegate
+- (void)didClickedTitleIndex:(NSInteger)index
+{
+    [self.scrollView setContentOffset:CGPointMake(index * SCREEN_WIDTH, 0) animated:YES];
+}
+
 #pragma mark WeiboUserInfoChildVCDelegate
 - (void)slideContentOffsetY:(CGFloat)offsetY childVC:(WeiboUserInfoChildVC *)viewController
 {
+    //控制header
     if (offsetY <= headerAboveHeight) {
         self.headerOffsetY = offsetY;
     }else {
         self.headerOffsetY = headerAboveHeight + headerHeight;
+    }
+    //控制标题栏
+    if (offsetY <= headerHeight - titleViewHeight - 64 && offsetY >= 0) {
+        self.titleView.center = CGPointMake(self.titleView.center.x, headerHeight - titleViewHeight/2 - offsetY);
+    }else if (offsetY < 0) {
+        self.titleView.center = CGPointMake(self.titleView.center.x, CGRectGetMaxY(self.headerView.frame) - titleViewHeight/2);
+    }else {
+        self.titleView.center = CGPointMake(self.titleView.center.x, 64 + titleViewHeight/2);
     }
 }
 
@@ -64,6 +79,10 @@ static CGFloat titleViewHeight = 40.f;
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView
 {
     NSUInteger index = round(scrollView.contentOffset.x / scrollView.frame.size.width);
+    if (index != self.currentPage) {
+        [self.titleView slideToTitleWithIndex:index];
+        self.currentPage = index;
+    }
     WeiboUserInfoChildVC *vc = self.childVCs[index];
     if (self.headerOffsetY <= headerHeight) {
         [vc setMainVCOffsetY:self.headerOffsetY];
@@ -72,12 +91,18 @@ static CGFloat titleViewHeight = 40.f;
     }
 }
 
+//系统setcontenoffset调用
 - (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView
 {
     NSUInteger index = round(scrollView.contentOffset.x / scrollView.frame.size.width);
     self.currentVC = self.childVCs[index];
+    self.currentPage = index;
+    if (self.currentVC.view.superview) return;
+    self.currentVC.view.frame = scrollView.bounds;
+    [self.scrollView addSubview:self.currentVC.view];
 }
 
+//手动滑动调用
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
 {
     [self scrollViewDidEndScrollingAnimation:scrollView];
@@ -105,8 +130,6 @@ static CGFloat titleViewHeight = 40.f;
     [self.scrollView addSubview:_childVCs[0].view];
     [self.view addSubview:self.headerView];
     [self.view addSubview:self.titleView];
-    self.titleLabels[0].textColor = [UIColor redColor];
-    
 }
 
 #pragma mark Get
@@ -130,19 +153,11 @@ static CGFloat titleViewHeight = 40.f;
     return _headerView;
 }
 
-- (UIView *)titleView
+- (WeiboUserInfoTitleView *)titleView
 {
     if (!_titleView) {
-        CGFloat labelWid = SCREEN_WIDTH/_childVCs.count;
-        _titleView = [[UIView alloc]initWithFrame:CGRectMake(0, headerHeight - titleViewHeight, SCREEN_WIDTH, titleViewHeight)];
-        _titleView.backgroundColor = [UIColor whiteColor];
-        for (int i = 0; i < _childVCs.count; i ++) {
-            UILabel *titleLabel = [[UILabel alloc]initWithFrame:CGRectMake(i * labelWid, 0, labelWid, titleViewHeight)];
-            titleLabel.text = _childVCs[i].title;
-            titleLabel.textAlignment = NSTextAlignmentCenter;
-            [_titleView addSubview:titleLabel];
-            [_titleLabels addObject:titleLabel];
-        }
+        _titleView = [[WeiboUserInfoTitleView alloc]initWithFrame:CGRectMake(0, headerHeight - titleViewHeight, SCREEN_WIDTH, titleViewHeight) titles:@[@"标题一",@"标题二",@"标题三"]];
+        _titleView.delegate = self;
     }
     return _titleView;
 }
